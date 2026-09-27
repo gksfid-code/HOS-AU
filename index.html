@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Field Log</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Jost:wght@400;500;600&display=swap">
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg:#dde1e8; --bg2:#eceef3; --card:#f0f2f6; --line:#c2c9d4;
+    --text:#262b34; --sub:#7c8494; --accent:#2f3947; --accent2:#5b7c94;
+    box-sizing:border-box;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  :root[data-theme="light"]{
+    --bg:#dde1e8; --bg2:#eceef3; --card:#f0f2f6; --line:#c2c9d4;
+    --text:#262b34; --sub:#7c8494; --accent:#2f3947; --accent2:#5b7c94;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#12151c; --bg2:#1a1e27; --card:#1e222c; --line:#363c48;
+      --text:#e8eaef; --sub:#8891a0; --accent:#dfe3ea; --accent2:#7fa0b8;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#12151c; --bg2:#1a1e27; --card:#1e222c; --line:#363c48;
+    --text:#e8eaef; --sub:#8891a0; --accent:#dfe3ea; --accent2:#7fa0b8;
+  }
+  html{scroll-padding-top:env(safe-area-inset-top,0px); height:100%;}
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100%; color:var(--text);
+    font-family:'Jost', sans-serif;
+    background:var(--bg);
+    display:flex; justify-content:center;
+  }
+  .wrap{width:100%; max-width:480px; padding:20px 16px 40px;}
+
+  /* header banner */
+  .banner{position:relative; background:var(--card); border:1px solid var(--line); padding:26px 20px 30px 24px; margin-bottom:16px; overflow:hidden; min-height:104px;}
+  .banner::before{content:''; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--accent);}
+  .banner-label{font-size:.72rem; line-height:1.6; color:var(--text); font-style:italic; padding-bottom:10px; border-bottom:1px solid var(--line); display:inline-block; max-width:78%;}
+  .banner-byline{font-size:.58rem; color:var(--sub); letter-spacing:1px; margin-top:6px;}
+
+  .clocks{display:flex; gap:8px; margin-bottom:8px;}
+  .clock{flex:1; background:var(--card); border:1px solid var(--line); padding:10px; display:flex; align-items:center; justify-content:center; gap:10px;}
+  .clock .flag{font-size:1.5rem; line-height:1;}
+  .clock .time{font-family:'Playfair Display',serif; font-size:1rem; color:var(--text);}
+
+  .status{display:flex; gap:8px; margin-bottom:16px;}
+  .status .chip{flex:1; background:var(--card); border:1px solid var(--line); padding:10px; text-align:center; font-size:.62rem; color:var(--sub); letter-spacing:.5px;}
+  .status .chip b{display:block; font-family:'Playfair Display',serif; font-size:1.15rem; color:var(--text); margin-top:4px; font-weight:700;}
+
+  .panel{background:var(--card); border:1px solid var(--line); padding:18px; margin-bottom:14px;}
+
+  .cal-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
+  .cal-head button{background:none; border:1px solid var(--line); color:var(--text); font-size:.85rem; padding:5px 12px; cursor:pointer;}
+  .cal-title{font-family:'Playfair Display',serif; font-size:1rem; letter-spacing:1px;}
+  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:6px;}
+  .cal-dow{width:24px; height:24px; border-radius:50%; border:1px solid var(--line); display:flex; align-items:center; justify-content:center;
+    font-family:'Playfair Display',serif; font-size:.62rem; color:var(--sub); margin:0 auto 6px;}
+  .cal-dow.today-dow{background:var(--accent); color:var(--bg); border-color:var(--accent);}
+  .cal-cell{
+    aspect-ratio:1/1; display:flex; align-items:center; justify-content:center;
+    border:1px solid var(--line); background:var(--bg2); cursor:pointer; position:relative; overflow:hidden;
+  }
+  .cal-cell.empty{border:none; background:transparent; cursor:default;}
+  .cal-cell.locked{border-color:transparent; background:transparent; cursor:default; opacity:.25;}
+  .cal-cell.today{box-shadow:0 0 0 1px var(--accent) inset;}
+  .cal-cell.selected{box-shadow:0 0 0 2px var(--accent2) inset;}
+  .cal-cell img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:.9;}
+  .cal-cell .num{
+    position:relative; z-index:1; font-family:'Playfair Display',serif; font-size:.85rem; color:var(--text);
+    line-height:1;
+  }
+  .cal-cell.has-photo .num{color:#fff; background:#1a1e2acc; padding:4px 7px; border-radius:2px;}
+  .cal-cell.locked .num{color:var(--sub);}
+  .cal-cell .badge{position:absolute; top:2px; right:2px; font-size:.6rem; z-index:2;}
+
+  .detail-date{font-family:'Playfair Display',serif; font-size:.95rem; color:var(--text); margin-bottom:12px; letter-spacing:.5px;}
+  .photo-slot{
+    width:100%; aspect-ratio:1/1; background:var(--bg2); border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    color:var(--sub); font-size:.72rem; padding:16px; line-height:1.7; overflow:hidden;
+  }
+  .photo-slot img{width:100%; height:100%; object-fit:cover;}
+  .roll-line{font-family:'Playfair Display',serif; font-size:1rem; color:var(--text); margin-top:14px; text-align:center; letter-spacing:.5px;}
+
+  .form-row{margin-top:10px;}
+  .form-row label{display:block; font-size:.62rem; color:var(--sub); margin-bottom:8px; letter-spacing:1px; text-transform:uppercase;}
+  .file-btn, .submit-btn{
+    width:100%; border:1px solid var(--line); background:var(--bg2); color:var(--text);
+    font-family:'Jost', sans-serif; font-size:.72rem; padding:12px; letter-spacing:.5px;
+  }
+  .submit-btn{margin-top:10px; background:var(--accent); color:var(--bg); border-color:var(--accent); cursor:pointer;}
+  .submit-btn:disabled{opacity:.4; cursor:default;}
+  .danger-btn{cursor:pointer; color:#b3423f; border-color:#b3423f;}
+  .danger-btn:disabled{opacity:.4; cursor:default;}
+  .hint{color:var(--sub); font-size:.65rem; text-align:center; margin-top:10px; line-height:1.7;}
+  .thumb-preview{width:100%; aspect-ratio:1/1; object-fit:cover; border:1px solid var(--line); margin-top:8px; display:none;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="banner">
+    <div class="banner-label" id="bannerLine"></div>
+    <div class="banner-byline" id="bannerByline"></div>
+  </div>
+
+  <div class="clocks">
+    <div class="clock"><span class="flag">🇰🇷</span><span class="time" id="clockSeoul">--:--</span></div>
+    <div class="clock"><span class="flag">🇦🇺</span><span class="time" id="clockCanberra">--:--</span></div>
+  </div>
+
+  <div class="status">
+    <div class="chip">연속 기록<b id="streakVal">0일</b></div>
+    <div class="chip">방어권<b id="ticketVal">0장</b></div>
+  </div>
+
+  <div class="panel">
+    <div class="cal-head">
+      <button id="prevMonth">◀</button>
+      <div class="cal-title" id="monthLabel"></div>
+      <button id="nextMonth">▶</button>
+    </div>
+    <div class="cal-grid" id="dowRow"></div>
+    <div class="cal-grid" id="calGrid" style="margin-top:6px;"></div>
+  </div>
+
+  <div class="panel">
+    <div class="detail-date" id="detailDate"></div>
+    <div id="detailBody"></div>
+  </div>
+
+</div>
+
+<script>
+// ⚠️ 아래 값을 Firebase 콘솔 > 프로젝트 설정 > 웹 앱에서 복사한 값으로 바꿔주세요.
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// Storage 없이, 사진을 작게 압축해서 Firestore 문서 안에 직접 저장해요 (문서당 1MB 제한 때문에 화질은 낮춰요).
+async function compressImage(file, maxDim=900, startQuality=0.6){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = ()=>{
+        let w = img.width, h = img.height;
+        if(w > h){ if(w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; } }
+        else { if(h > maxDim){ w = Math.round(w * maxDim / h); h = maxDim; } }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        let q = startQuality;
+        let dataUrl = canvas.toDataURL('image/jpeg', q);
+        while(dataUrl.length > 650000 && q > 0.2){
+          q -= 0.1;
+          dataUrl = canvas.toDataURL('image/jpeg', q);
+        }
+        resolve(dataUrl);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+const TRIP_START = '2026-09-28';
+const TRIP_END   = '2026-11-22';
+
+function fmt(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function parseKey(key){ const [y,m,d]=key.split('-').map(Number); return new Date(y,m-1,d); }
+function addDays(key,n){ const d=parseKey(key); d.setDate(d.getDate()+n); return fmt(d); }
+
+function seoulParts(){
+  const p = new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Seoul',hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).formatToParts(new Date());
+  const o={}; p.forEach(x=>o[x.type]=x.value);
+  return {y:+o.year,m:+o.month,d:+o.day,h:(o.hour==='24'?0:+o.hour),min:+o.minute};
+}
+function gameDateKey(){
+  const s = seoulParts();
+  let key = s.y+'-'+String(s.m).padStart(2,'0')+'-'+String(s.d).padStart(2,'0');
+  if(s.h < 4) key = addDays(key,-1);
+  return key;
+}
+
+let GAME_DATE = gameDateKey();
+let viewYear, viewMonth, selectedKey;
+{ const d = parseKey(GAME_DATE); viewYear=d.getFullYear(); viewMonth=d.getMonth(); selectedKey=GAME_DATE; }
+
+const LINES = [
+  {name:'L', line:'그곳의 날씨는 어떤가요? 가는 골목골목 빛이 닿길.'},
+  {name:'L', line:'모란님께서 새로운 풍경을 담아오는 동안 저는 잠시 이그라에 들렸어요.'},
+  {name:'안내자', line:'잊으신 물건은 없으십니까?'},
+  {name:'안내자', line:'가방이 너무 무거워 보입니다.'},
+  {name:'실바인 베인', line:'날씨 좋네, 선물 사와라.'},
+  {name:'실바인 베인', line:'신발 끈 잘 묶고 다녀라. 낯선 곳에서 넘어져도 일으켜줄 사람은 없다고.'},
+  {name:'브란', line:'가끔은 목적지 없이 발길 닿는 대로 걸어보는 것도 여행의 참맛이지.'},
+  {name:'브란', line:"발바닥이 조금 시큰거릴 때쯤엔 잠시 앉아 하늘을 봐. 모험가에게도 '아무것도 안 할 권리'는 필요한 법이니까."},
+  {name:'미우', line:'야옹.'},
+  {name:'미우', line:'뭬옹.'}
+];
+function hashKey(key){ let h=0; for(let i=0;i<key.length;i++){ h=(h*31+key.charCodeAt(i))>>>0; } return h; }
+const todayLine = LINES[hashKey(GAME_DATE) % LINES.length];
+document.getElementById('bannerLine').textContent = todayLine.line;
+document.getElementById('bannerByline').textContent = '— ' + todayLine.name;
+
+let entries = {}; // dateKey -> {id,url,roll}
+let coveredDates = new Set();
+let streakInfo = {streak:0, ticket:0};
+
+function updateClocks(){
+  const opt = {hour:'2-digit',minute:'2-digit',hour12:false};
+  document.getElementById('clockSeoul').textContent = new Intl.DateTimeFormat('ko-KR',{...opt,timeZone:'Asia/Seoul'}).format(new Date());
+  document.getElementById('clockCanberra').textContent = new Intl.DateTimeFormat('ko-KR',{...opt,timeZone:'Australia/Canberra'}).format(new Date());
+}
+updateClocks(); setInterval(updateClocks, 15000);
+
+const DOW = ['일','월','화','수','목','금','토'];
+const todayDow = parseKey(GAME_DATE).getDay();
+document.getElementById('dowRow').innerHTML = DOW.map((d,i)=>`<div class="cal-dow${i===todayDow?' today-dow':''}">${d}</div>`).join('');
+document.getElementById('prevMonth').onclick = ()=>{ viewMonth--; if(viewMonth<0){viewMonth=11; viewYear--;} renderCalendar(); };
+document.getElementById('nextMonth').onclick = ()=>{ viewMonth++; if(viewMonth>11){viewMonth=0; viewYear++;} renderCalendar(); };
+
+function inRange(key){ return key>=TRIP_START && key<=TRIP_END; }
+
+function computeStreak(){
+  let ticket=0, streak=0, consec=0;
+  coveredDates = new Set();
+  let d = parseKey(TRIP_START);
+  const endKey = GAME_DATE < TRIP_END ? GAME_DATE : TRIP_END;
+  while(fmt(d) <= endKey){
+    const key = fmt(d);
+    const has = !!entries[key];
+    if(key === GAME_DATE && !has) break;
+    if(has){
+      streak++; consec++;
+      if(consec % 3 === 0) ticket++;
+    } else if(ticket > 0){
+      ticket--; streak++; coveredDates.add(key);
+    } else {
+      streak = 0; consec = 0;
+    }
+    d.setDate(d.getDate()+1);
+  }
+  streakInfo = {streak, ticket};
+  document.getElementById('streakVal').textContent = streak+'일';
+  document.getElementById('ticketVal').textContent = ticket+'장';
+}
+
+function renderCalendar(){
+  document.getElementById('monthLabel').textContent = `${viewYear}.${String(viewMonth+1).padStart(2,'0')}`;
+  const first = new Date(viewYear, viewMonth, 1);
+  const startDow = first.getDay();
+  const daysInMonth = new Date(viewYear, viewMonth+1, 0).getDate();
+  let html = '';
+  for(let i=0;i<startDow;i++) html += `<div class="cal-cell empty"></div>`;
+  for(let d=1; d<=daysInMonth; d++){
+    const key = fmt(new Date(viewYear, viewMonth, d));
+    const within = inRange(key);
+    const entry = entries[key];
+    let cls = 'cal-cell';
+    if(!within) cls += ' locked';
+    if(key===GAME_DATE) cls += ' today';
+    if(key===selectedKey) cls += ' selected';
+    const img = entry ? `<img src="${entry.url}">` : '';
+    if(entry) cls += ' has-photo';
+    let badge = '';
+    if(within && !entry && coveredDates.has(key)) badge = '<div class="badge">🛡</div>';
+    html += `<div class="${cls}" data-key="${key}" data-within="${within?1:0}">${img}<span class="num">${d}</span>${badge}</div>`;
+  }
+  document.getElementById('calGrid').innerHTML = html;
+  document.querySelectorAll('.cal-cell[data-key]').forEach(el=>{
+    if(el.dataset.within==='1'){
+      el.onclick = ()=>{ selectedKey = el.dataset.key; renderCalendar(); renderDetail(); };
+    }
+  });
+}
+
+function renderDetail(){
+  document.getElementById('detailDate').textContent = selectedKey + (selectedKey===GAME_DATE ? ' (오늘)' : '');
+  const body = document.getElementById('detailBody');
+  const entry = entries[selectedKey];
+
+  if(entry){
+    const rollHtml = entry.roll != null
+      ? `<div class="roll-line">✧1d100=${entry.roll} [${selectedKey}]</div>`
+      : '';
+    body.innerHTML = `
+      <div class="photo-slot"><img src="${entry.url}"></div>
+      ${rollHtml}
+      <button type="button" class="file-btn" id="editPhotoBtn" style="margin-top:12px;">사진 수정</button>
+      <input type="file" id="editFileInput" accept="image/*" style="display:none;">
+      <button type="button" class="file-btn danger-btn" id="deletePhotoBtn" style="margin-top:8px;">사진 삭제</button>`;
+    setupEditPhoto(entry.id);
+    setupDeletePhoto(entry.id);
+    return;
+  }
+
+  if(selectedKey === GAME_DATE){
+    body.innerHTML = `
+      <div class="form-row">
+        <label>오늘의 사진</label>
+        <button type="button" class="file-btn" id="pickFile">사진 선택</button>
+        <input type="file" id="fileInput" accept="image/*" style="display:none;">
+        <img class="thumb-preview" id="thumbPreview">
+      </div>
+      <button class="submit-btn" id="submitBtn" disabled>사진 올리기</button>
+      <div class="hint" id="formHint"></div>`;
+    setupForm();
+  } else {
+    const covered = coveredDates.has(selectedKey);
+    const future = selectedKey > GAME_DATE;
+    body.innerHTML = `<div class="photo-slot">${future ? '아직 오지 않은 날이에요' : (covered ? '🛡 방어권으로 지나간 날이에요' : '기록이 없는 날이에요')}</div>`;
+  }
+}
+
+function setupForm(){
+  let file=null;
+  document.getElementById('pickFile').onclick = ()=>document.getElementById('fileInput').click();
+  document.getElementById('fileInput').onchange = (e)=>{
+    file = e.target.files[0];
+    if(file){
+      const url = URL.createObjectURL(file);
+      const prev = document.getElementById('thumbPreview');
+      prev.src = url; prev.style.display='block';
+    }
+    document.getElementById('submitBtn').disabled = !file;
+  };
+  document.getElementById('submitBtn').onclick = async ()=>{
+    if(!file) return;
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true; btn.textContent = '저장 중...';
+    try{
+      const dataUrl = await compressImage(file);
+      const roll = Math.floor(Math.random()*100)+1;
+      await db.collection('photos').add({url:dataUrl, dateKey:GAME_DATE, roll, rolledAt:Date.now(), uploadedAt:Date.now()});
+    }catch(err){
+      alert('저장에 실패했어요: '+(err?.message||err));
+      btn.disabled=false; btn.textContent='사진 올리기';
+    }
+  };
+}
+
+function setupEditPhoto(entryId){
+  const btn = document.getElementById('editPhotoBtn');
+  const input = document.getElementById('editFileInput');
+  if(!btn) return;
+  btn.onclick = ()=>input.click();
+  input.onchange = async (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    btn.disabled = true; btn.textContent = '수정 중...';
+    try{
+      const dataUrl = await compressImage(file);
+      await db.doc('photos/'+entryId).update({url:dataUrl, updatedAt:Date.now()});
+    }catch(err){
+      alert('사진 수정에 실패했어요: '+(err?.message||err));
+    }
+    btn.disabled = false; btn.textContent = '사진 수정';
+  };
+}
+
+function setupDeletePhoto(entryId){
+  const btn = document.getElementById('deletePhotoBtn');
+  if(!btn) return;
+  btn.onclick = async ()=>{
+    if(!confirm('이 사진을 정말 삭제할까요? 되돌릴 수 없어요.')) return;
+    btn.disabled = true; btn.textContent = '삭제 중...';
+    try{
+      await db.doc('photos/'+entryId).delete();
+    }catch(err){
+      alert('삭제에 실패했어요: '+(err?.message||err));
+      btn.disabled = false; btn.textContent = '사진 삭제';
+    }
+  };
+}
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function init(){
+  renderCalendar(); renderDetail();
+  db.collection('photos').orderBy('dateKey','desc').limit(400).onSnapshot(snap=>{
+    entries = {};
+    (snap.docs||[]).forEach(d=>{
+      const data = d.data();
+      entries[data.dateKey] = {id:d.id, url:data.url, roll: (data.roll===undefined? null : data.roll)};
+    });
+    computeStreak();
+    renderCalendar();
+    renderDetail();
+  }, err=>{
+    document.getElementById('detailBody').innerHTML = '<div class="photo-slot">연결 실패: firebaseConfig 값을 확인해주세요<br>('+err.message+')</div>';
+  });
+}
+init();
+</script>
+</body>
+</html>
