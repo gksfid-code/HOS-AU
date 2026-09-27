@@ -141,15 +141,15 @@
 <script>
 // ⚠️ 아래 값을 Firebase 콘솔 > 프로젝트 설정 > 웹 앱에서 복사한 값으로 바꿔주세요.
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDj9nL0tdmnaBve7dzZh3BWZjn1SaM0yxk",
+  authDomain: "hos-au.firebaseapp.com",
+  databaseURL: "https://hos-au-default-rtdb.firebaseio.com",
+  projectId: "hos-au",
+  storageBucket: "hos-au.firebasestorage.app",
+  messagingSenderId: "419182328436",
+  appId: "1:419182328436:web:e7e8dc0c3998d2bcbaaf21",
+  measurementId: "G-3W5XD8K29L"
 };
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
 
 // Storage 없이, 사진을 작게 압축해서 Firestore 문서 안에 직접 저장해요 (문서당 1MB 제한 때문에 화질은 낮춰요).
 async function compressImage(file, maxDim=900, startQuality=0.6){
