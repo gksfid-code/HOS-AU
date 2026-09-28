@@ -141,15 +141,15 @@
 <script>
 // ⚠️ 아래 값을 Firebase 콘솔 > 프로젝트 설정 > 웹 앱에서 복사한 값으로 바꿔주세요.
 const firebaseConfig = {
-  apiKey: "AIzaSyDj9nL0tdmnaBve7dzZh3BWZjn1SaM0yxk",
-  authDomain: "hos-au.firebaseapp.com",
-  databaseURL: "https://hos-au-default-rtdb.firebaseio.com",
-  projectId: "hos-au",
-  storageBucket: "hos-au.firebasestorage.app",
-  messagingSenderId: "419182328436",
-  appId: "1:419182328436:web:e7e8dc0c3998d2bcbaaf21",
-  measurementId: "G-3W5XD8K29L"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
 };
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
 // Storage 없이, 사진을 작게 압축해서 Firestore 문서 안에 직접 저장해요 (문서당 1MB 제한 때문에 화질은 낮춰요).
 async function compressImage(file, maxDim=900, startQuality=0.6){
@@ -201,7 +201,10 @@ function gameDateKey(){
 
 let GAME_DATE = gameDateKey();
 let viewYear, viewMonth, selectedKey;
-{ const d = parseKey(GAME_DATE); viewYear=d.getFullYear(); viewMonth=d.getMonth(); selectedKey=GAME_DATE; }
+{
+  selectedKey = GAME_DATE < TRIP_START ? TRIP_START : (GAME_DATE > TRIP_END ? TRIP_END : GAME_DATE);
+  const d = parseKey(selectedKey); viewYear=d.getFullYear(); viewMonth=d.getMonth();
+}
 
 const LINES = [
   {name:'L', line:'그곳의 날씨는 어떤가요? 가는 골목골목 빛이 닿길.'},
@@ -213,7 +216,9 @@ const LINES = [
   {name:'브란', line:'가끔은 목적지 없이 발길 닿는 대로 걸어보는 것도 여행의 참맛이지.'},
   {name:'브란', line:"발바닥이 조금 시큰거릴 때쯤엔 잠시 앉아 하늘을 봐. 모험가에게도 '아무것도 안 할 권리'는 필요한 법이니까."},
   {name:'미우', line:'야옹.'},
-  {name:'미우', line:'뭬옹.'}
+  {name:'미우', line:'뭬옹.'},
+  {name:'???', line:'오늘 밤엔 그곳 하늘에서 가장 크게 빛나는 별을 유심히 봐주세요.'},
+  {name:'???', line:'가장 맛있는 음식을 먹고, 가장 아름다운 야경을 보며 마지막 밤들을 보내길.'}
 ];
 function hashKey(key){ let h=0; for(let i=0;i<key.length;i++){ h=(h*31+key.charCodeAt(i))>>>0; } return h; }
 const todayLine = LINES[hashKey(GAME_DATE) % LINES.length];
@@ -275,7 +280,7 @@ function renderCalendar(){
     const within = inRange(key);
     const entry = entries[key];
     let cls = 'cal-cell';
-    if(!within) cls += ' locked';
+    if(!within && !entry) cls += ' locked';
     if(key===GAME_DATE) cls += ' today';
     if(key===selectedKey) cls += ' selected';
     const img = entry ? `<img src="${entry.url}">` : '';
@@ -286,13 +291,21 @@ function renderCalendar(){
   }
   document.getElementById('calGrid').innerHTML = html;
   document.querySelectorAll('.cal-cell[data-key]').forEach(el=>{
-    if(el.dataset.within==='1'){
+    if(el.dataset.within==='1' || entries[el.dataset.key]){
       el.onclick = ()=>{ selectedKey = el.dataset.key; renderCalendar(); renderDetail(); };
     }
   });
 }
 
+let lastSig = '';
+function detailSig(){
+  const e = entries[selectedKey];
+  return selectedKey+'|'+(e ? e.id+'|'+e.roll+'|'+e.url.length : 'none')+'|'+coveredDates.has(selectedKey);
+}
+function renderDetailIfChanged(){ if(detailSig()!==lastSig) renderDetail(); }
+
 function renderDetail(){
+  lastSig = detailSig();
   document.getElementById('detailDate').textContent = selectedKey + (selectedKey===GAME_DATE ? ' (오늘)' : '');
   const body = document.getElementById('detailBody');
   const entry = entries[selectedKey];
@@ -312,7 +325,7 @@ function renderDetail(){
     return;
   }
 
-  if(selectedKey === GAME_DATE){
+  if(selectedKey === GAME_DATE && inRange(GAME_DATE)){
     body.innerHTML = `
       <div class="form-row">
         <label>오늘의 사진</label>
@@ -326,7 +339,10 @@ function renderDetail(){
   } else {
     const covered = coveredDates.has(selectedKey);
     const future = selectedKey > GAME_DATE;
-    body.innerHTML = `<div class="photo-slot">${future ? '아직 오지 않은 날이에요' : (covered ? '🛡 방어권으로 지나간 날이에요' : '기록이 없는 날이에요')}</div>`;
+    let msg = future ? '아직 오지 않은 날이에요' : (covered ? '🛡 방어권으로 지나간 날이에요' : '기록이 없는 날이에요');
+    if(GAME_DATE < TRIP_START) msg = '아직 시작 전이에요 (09.28부터)';
+    else if(GAME_DATE > TRIP_END) msg = '기록 기간이 끝났어요';
+    body.innerHTML = `<div class="photo-slot">${msg}</div>`;
   }
 }
 
@@ -344,6 +360,7 @@ function setupForm(){
   };
   document.getElementById('submitBtn').onclick = async ()=>{
     if(!file) return;
+    if(entries[GAME_DATE]){ alert('오늘은 이미 사진이 있어요.'); return; }
     const btn = document.getElementById('submitBtn');
     btn.disabled = true; btn.textContent = '저장 중...';
     try{
@@ -397,6 +414,10 @@ function escapeHtml(s){
 
 function init(){
   renderCalendar(); renderDetail();
+  if(firebaseConfig.apiKey === 'YOUR_API_KEY'){
+    document.getElementById('detailBody').innerHTML = '<div class="photo-slot">index.html 위쪽의 firebaseConfig를<br>내 Firebase 값으로 바꿔주세요</div>';
+    return;
+  }
   db.collection('photos').orderBy('dateKey','desc').limit(400).onSnapshot(snap=>{
     entries = {};
     (snap.docs||[]).forEach(d=>{
@@ -405,7 +426,7 @@ function init(){
     });
     computeStreak();
     renderCalendar();
-    renderDetail();
+    renderDetailIfChanged();
   }, err=>{
     document.getElementById('detailBody').innerHTML = '<div class="photo-slot">연결 실패: firebaseConfig 값을 확인해주세요<br>('+err.message+')</div>';
   });
