@@ -143,16 +143,16 @@
 <script>
 // ⚠️ 아래 값을 Firebase 콘솔 > 프로젝트 설정 > 웹 앱에서 복사한 값으로 바꿔주세요.
 const firebaseConfig = {
-  apiKey: "AIzaSyDj9nL0tdmnaBve7dzZh3BWZjn1SaM0yxk",
-  authDomain: "hos-au.firebaseapp.com",
-  projectId: "hos-au",
-  storageBucket: "hos-au.firebasestorage.app",
-  messagingSenderId: "419182328436",
-  appId: "1:419182328436:web:e7e8dc0c3998d2bcbaaf21",
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
 };
-
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+
 // Storage 없이, 사진을 작게 압축해서 Firestore 문서 안에 직접 저장해요 (문서당 1MB 제한 때문에 화질은 낮춰요).
 async function compressImage(file, maxDim=800, startQuality=0.55){
   return new Promise((resolve, reject)=>{
@@ -188,7 +188,7 @@ function withTimeout(p, ms){
 function explainError(err){
   const code = (err && err.code) || '';
   if(code==='permission-denied') return '권한 오류예요. 오늘 사진이 이미 올라와 있거나, Firestore 규칙이 게시되지 않았을 수 있어요.';
-  if(code==='timeout' || code==='unavailable') return '서버 응답이 없어요. Firestore Database를 "만들기"까지 했는지, firebaseConfig의 projectId가 맞는지 확인해 주세요.';
+  if(code==='timeout' || code==='unavailable') return '서버 응답이 없어요. (현재 projectId: ' + firebaseConfig.projectId + ') 이 값이 Firebase 콘솔의 프로젝트 ID와 같은지, Firestore Database가 "만들기"까지 완료됐는지 확인해 주세요.';
   if(code==='invalid-argument') return '사진 용량이 너무 커요. 다른 사진으로 다시 시도해 주세요.';
   return '저장 실패: ' + ((err && err.message) || err);
 }
@@ -324,15 +324,21 @@ function renderDetail(){
   const entry = entries[selectedKey];
 
   if(entry){
+    const canEdit = (selectedKey === GAME_DATE) && inRange(GAME_DATE);
     const rollHtml = entry.roll != null
       ? `<div class="roll-line">✧1d100=${entry.roll} [${selectedKey}]</div>`
       : '';
     body.innerHTML = `
       <div class="photo-slot"><img src="${entry.url}"></div>
       ${rollHtml}
-      <div class="note-small">사진은 한 번 올리면 수정할 수 없어요</div>
+      ${canEdit
+        ? `<div class="note-small">오늘(새벽 4시 갱신 전)까지만 수정할 수 있어요</div>
+           <button type="button" class="file-btn" id="editPhotoBtn" style="margin-top:12px;">사진 수정</button>
+           <input type="file" id="editFileInput" accept="image/*" style="display:none;">`
+        : `<div class="note-small">날짜가 지나 사진을 수정할 수 없어요</div>`}
       <button type="button" class="file-btn danger-btn" id="deletePhotoBtn" style="margin-top:12px;">사진 삭제</button>
       <div class="hint" id="delHint"></div>`;
+    if(canEdit) setupEditPhoto(entry.id);
     setupDeletePhoto(entry.id);
     return;
   }
@@ -346,7 +352,7 @@ function renderDetail(){
         <img class="thumb-preview" id="thumbPreview">
       </div>
       <button class="submit-btn" id="submitBtn" disabled>사진 올리기</button>
-      <div class="note-small">사진은 한 번 올리면 수정할 수 없어요</div>
+      <div class="note-small">오늘(새벽 4시 갱신 전)까지는 수정할 수 있어요</div>
       <div class="hint" id="formHint"></div>`;
     setupForm();
   } else {
@@ -375,6 +381,7 @@ function setupForm(){
     if(!file) return;
     const hint = document.getElementById('formHint');
     hint.className = 'hint';
+    if(gameDateKey() !== GAME_DATE){ hint.className='hint err'; hint.textContent='날짜가 바뀌었어요. 새로고침해 주세요.'; return; }
     if(entries[GAME_DATE]){ hint.className='hint err'; hint.textContent='오늘은 이미 사진이 있어요.'; return; }
     const btn = document.getElementById('submitBtn');
     btn.disabled = true; btn.textContent = '저장 중...';
@@ -393,6 +400,37 @@ function setupForm(){
       hint.textContent = (err instanceof Event) ? '이 사진 형식은 읽을 수 없어요. JPG/PNG 사진으로 시도해 주세요.' : explainError(err);
       btn.disabled = false; btn.textContent = '사진 올리기';
     }
+  };
+}
+
+function setupEditPhoto(entryId){
+  const btn = document.getElementById('editPhotoBtn');
+  const input = document.getElementById('editFileInput');
+  const hint = document.getElementById('delHint');
+  if(!btn) return;
+  btn.onclick = ()=>{
+    if(gameDateKey() !== selectedKey){
+      hint.className='hint err'; hint.textContent='날짜가 지나 수정할 수 없어요. 새로고침해 주세요.'; return;
+    }
+    input.click();
+  };
+  input.onchange = async (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    if(gameDateKey() !== selectedKey){
+      hint.className='hint err'; hint.textContent='날짜가 지나 수정할 수 없어요.'; return;
+    }
+    btn.disabled = true; btn.textContent = '수정 중...';
+    hint.className = 'hint'; hint.textContent = '';
+    try{
+      const dataUrl = await compressImage(file);
+      await withTimeout(db.doc('photos/'+entryId).update({url:dataUrl, updatedAt:Date.now()}), 20000);
+    }catch(err){
+      console.error(err);
+      hint.className = 'hint err';
+      hint.textContent = (err instanceof Event) ? '이 사진 형식은 읽을 수 없어요. JPG/PNG로 시도해 주세요.' : explainError(err);
+    }
+    btn.disabled = false; btn.textContent = '사진 수정';
   };
 }
 
