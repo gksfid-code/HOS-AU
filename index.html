@@ -153,6 +153,9 @@
   measurementId: "G-3W5XD8K29L"
 };
 
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
 // Storage 없이, 사진을 작게 압축해서 Firestore 문서 안에 직접 저장해요 (문서당 1MB 제한 때문에 화질은 낮춰요).
 async function compressImage(file, maxDim=800, startQuality=0.55){
   return new Promise((resolve, reject)=>{
