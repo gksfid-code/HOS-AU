@@ -236,8 +236,20 @@ const LINES = [
   {name:'???', line:'오늘 밤엔 그곳 하늘에서 가장 크게 빛나는 별을 유심히 봐주세요.'},
   {name:'???', line:'가장 맛있는 음식을 먹고, 가장 아름다운 야경을 보며 마지막 밤들을 보내길.'}
 ];
-function hashKey(key){ let h=0; for(let i=0;i<key.length;i++){ h=(h*31+key.charCodeAt(i))>>>0; } return h; }
-const todayLine = LINES[hashKey(GAME_DATE) % LINES.length];
+function hashKey(key){
+  let h = 2166136261;
+  for(let i=0;i<key.length;i++){
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  h ^= h >>> 13;
+  h = Math.imul(h, 0x5bd1e995);
+  h ^= h >>> 15;
+  return h >>> 0;
+}
+const idx = hashKey(GAME_DATE) % LINES.length;
+const prevIdx = hashKey(addDays(GAME_DATE,-1)) % LINES.length;
+const todayLine = LINES[idx === prevIdx ? (idx+1) % LINES.length : idx];
 document.getElementById('bannerLine').textContent = todayLine.line;
 document.getElementById('bannerByline').textContent = '— ' + todayLine.name;
 
