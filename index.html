@@ -260,7 +260,7 @@ let streakInfo = {streak:0, ticket:0};
 function updateClocks(){
   const opt = {hour:'2-digit',minute:'2-digit',hour12:false};
   document.getElementById('clockSeoul').textContent = new Intl.DateTimeFormat('ko-KR',{...opt,timeZone:'Asia/Seoul'}).format(new Date());
-  document.getElementById('clockCanberra').textContent = new Intl.DateTimeFormat('ko-KR',{...opt,timeZone:'Australia/Canberra'}).format(new Date());
+  document.getElementById('clockCanberra').textContent = new Intl.DateTimeFormat('ko-KR',{...opt,timeZone:'Australia/Brisbane'}).format(new Date());
 }
 updateClocks(); setInterval(updateClocks, 15000);
 
