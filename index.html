@@ -247,9 +247,27 @@ function hashKey(key){
   h ^= h >>> 15;
   return h >>> 0;
 }
-const idx = hashKey(GAME_DATE) % LINES.length;
-const prevIdx = hashKey(addDays(GAME_DATE,-1)) % LINES.length;
-const todayLine = LINES[idx === prevIdx ? (idx+1) % LINES.length : idx];
+// 캐릭터별로 묶기
+const CHARS = [];
+LINES.forEach(l=>{
+  let c = CHARS.find(x=>x.name===l.name);
+  if(!c){ c = {name:l.name, lines:[]}; CHARS.push(c); }
+  c.lines.push(l.line);
+});
+
+// 해당 날짜의 캐릭터 인덱스 (날짜 키를 섞어서 쏠림 방지)
+function charIdxFor(key){
+  return hashKey('char:'+key) % CHARS.length;
+}
+function pickFor(key){
+  let ci = charIdxFor(key);
+  // 전날과 같은 캐릭터면 다음 캐릭터로
+  if(ci === charIdxFor(addDays(key,-1))) ci = (ci+1) % CHARS.length;
+  const c = CHARS[ci];
+  const li = hashKey('line:'+key) % c.lines.length;
+  return {name:c.name, line:c.lines[li]};
+}
+const todayLine = pickFor(GAME_DATE);
 document.getElementById('bannerLine').textContent = todayLine.line;
 document.getElementById('bannerByline').textContent = '— ' + todayLine.name;
 
